@@ -142,25 +142,28 @@ async def bid(ctx, *, tmPlayerAndAmt):
         player = tmPlayerAndAmt[first_space+1:last_space]
     else:
         player = ""
-    if player.strip() == "":
-        await ctx.send("❌ Player name cannot be empty.")
-        return
+    
     
     # Validate Amount
     amount = tmPlayerAndAmt.rsplit(" ", 1)[-1]
+    amount = amount.strip()
     if amount.endswith("k"):
         amount = amount[:-1]
-    if amount.lower() != "pass":
+    
+    isPassing = amount.lower() == "pass"
+    if not isPassing:
         if not amount.isdigit():
             await ctx.send("❌ Invalid amount format. Use a number followed by 'k' (e.g., 1k).")
             return
         else:
             amount = int(amount)
-            # ToDo: Is amount large enough?
+            if amount <= saved_data["round"][-1]["Amt"]:
+                await ctx.send(f"❌ Bid amount must be higher than the current bid of {saved_data['round'][-1]['Amt']}k.")
+                return
 
     # Update round bidding
     roundList = saved_data["round"]
-    if amount.lower() == "pass":
+    if isPassing:
         roundList.pop(0)
     else:
         first = roundList.pop(0)
