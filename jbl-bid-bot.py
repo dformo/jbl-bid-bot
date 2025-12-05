@@ -48,6 +48,41 @@ async def startdraft(ctx, *, teams):
 # COMMAND !draftstatus: Show current round status
 @bot.command()
 async def draftstatus(ctx):
+    if len(saved_data["draft"]) == 0:
+        await ctx.send("❌ No draft in progress. Use !startdraft to begin.")
+        return
+    if len(saved_data["round"]) == 0:
+        nextTmToIntro = ""
+        for entry in saved_data["draft"]:
+            if entry["Player"] == "":
+                nextTmToIntro = entry["IntroTm"]
+                break
+        await ctx.send(f"📝 Next to introduce a player: {nextTmToIntro} (i.e !introduce TM Player Name 10k)")
+        return
+    
+    playerName = ""
+    for entry in saved_data["round"]:
+        if entry["Player"] != "":
+            playerName = entry["Player"]
+        else:
+            break
+    amount = saved_data["round"][-1]["Amt"]
+    teamName = saved_data["round"][-1]["Tm"]
+    next_to_bid = saved_data["round"][0]["Tm"]
+    in_the_hole = ""
+    if len(saved_data["round"]) > 1:
+        in_the_hole = saved_data["round"][1]["Tm"]
+    msg = (
+        f"**{playerName}** currently at **{amount}k** to **{teamName}**\n"
+        f"Next to bid: **{next_to_bid}**"
+    )
+    msg = msg + f"\nIn the hole: **{in_the_hole}**"
+    
+    await ctx.send(msg)
+
+# COMMAND !draftrecap: Show draft recap
+@bot.command()
+async def draftrecap(ctx):
     # ToDo: Format output better
     await ctx.send(f"{saved_data}")
 
@@ -142,8 +177,7 @@ async def bid(ctx, *, tmPlayerAndAmt):
         player = tmPlayerAndAmt[first_space+1:last_space]
     else:
         player = ""
-    
-    
+       
     # Validate Amount
     amount = tmPlayerAndAmt.rsplit(" ", 1)[-1]
     amount = amount.strip()
