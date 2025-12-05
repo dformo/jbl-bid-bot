@@ -57,7 +57,7 @@ async def draftstatus(ctx):
             if entry["Player"] == "":
                 nextTmToIntro = entry["IntroTm"]
                 break
-        await ctx.send(f"📝 Next to introduce a player: {nextTmToIntro} (i.e !introduce TM Player Name 10k)")
+        await ctx.send(f"Next to introduce a player: {nextTmToIntro}")
         return
     
     playerName = ""
@@ -73,7 +73,7 @@ async def draftstatus(ctx):
     if len(saved_data["round"]) > 2:
         next_to_bid = saved_data["round"][1]["Tm"]
     msg = (
-        f"⚾**{playerName}** currently at **{amount}k** to **{teamName}**\n"
+        f"**{playerName}** currently at **{amount}k** to **{teamName}**\n"
         f"On the clock to bid: **{on_the_clock}**"
     )
     if next_to_bid != "":
