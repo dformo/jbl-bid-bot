@@ -61,22 +61,23 @@ async def draftstatus(ctx):
         return
     
     playerName = ""
-    for entry in saved_data["round"]:
+    for entry in saved_data["draft"]:
         if entry["Player"] != "":
             playerName = entry["Player"]
         else:
             break
     amount = saved_data["round"][-1]["Amt"]
     teamName = saved_data["round"][-1]["Tm"]
-    next_to_bid = saved_data["round"][0]["Tm"]
-    in_the_hole = ""
-    if len(saved_data["round"]) > 1:
-        in_the_hole = saved_data["round"][1]["Tm"]
+    on_the_clock = saved_data["round"][0]["Tm"]
+    next_to_bid = ""
+    if len(saved_data["round"]) > 2:
+        next_to_bid = saved_data["round"][1]["Tm"]
     msg = (
-        f"**{playerName}** currently at **{amount}k** to **{teamName}**\n"
-        f"Next to bid: **{next_to_bid}**"
+        f"⚾**{playerName}** currently at **{amount}k** to **{teamName}**\n"
+        f"On the clock to bid: **{on_the_clock}**"
     )
-    msg = msg + f"\nIn the hole: **{in_the_hole}**"
+    if next_to_bid != "":
+        msg = msg + f"\nNext up to bid: **{next_to_bid}**"
     
     await ctx.send(msg)
 
@@ -167,7 +168,7 @@ async def bid(ctx, *, tmPlayerAndAmt):
     team = tmPlayerAndAmt.split(" ")[0]
     currentBidTeam = saved_data["round"][0]["Tm"]
     if team != currentBidTeam:
-        await ctx.send(f"❌ It's not {team}'s turn to bid. Next to bid: {currentBidTeam}")
+        await ctx.send(f"❌ It's not {team}'s turn to bid. On the clock to bid: {currentBidTeam}")
         return
     
     # Validate Player
