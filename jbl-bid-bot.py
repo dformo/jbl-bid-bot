@@ -41,6 +41,9 @@ async def on_ready():
 @bot.command()
 async def startdraft(ctx, *, teams):
     teamList = teams.split(",")
+    if len(teamList) < 2:
+        await ctx.send("❌ At least two teams are required to start a draft.")
+        return
     structuredTeamList = [{"IntroTm": tm.strip(), "ClaimTm": "", "Player": "", "Amt": 0} for tm in teamList]
     saved_data["draft"] = structuredTeamList
     saved_data["round"] = []
