@@ -6,6 +6,7 @@
 
 `py -3 -m pip install -r 'requirements.txt'`
 
--Set your Discord token using the following Powershell command:
+-To start the bot replace the token below with your Discord token and run the following in command line:
 
-`$env:DISCORD_TOKEN = "YOUR_NEW_TOKEN"`
+`$env:DISCORD_TOKEN = "YOUR_NEW_TOKEN"
+py .\jbl-bid-bot.py`
