@@ -1,6 +1,6 @@
 -Install Python
 
--Download contents of repository files into a folder
+-Download contents of repository into a folder
 
 -Open command line in same folder as above and run:
 
