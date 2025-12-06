@@ -1,4 +1,2 @@
 # Requirements detected from `jbl-bid-bot.py`
 discord.py>=2.0.0
-
-Command line: py -3 -m pip install -r 'C:\Users\danfo\Documents\code\jbl-bid-bot\requirements.txt'
