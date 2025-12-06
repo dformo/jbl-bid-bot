@@ -6,7 +6,14 @@
 
 `py -3 -m pip install -r 'requirements.txt'`
 
--To start the bot replace the token below with your Discord token and run the following in command line:
+-Start the bot:
 
-`$env:DISCORD_TOKEN = "YOUR_NEW_TOKEN"
-py .\jbl-bid-bot.py`
+1. Run the following in command line (after inserting your token):
+
+`.\run-bot.ps1 -Token "YOUR_TOKEN_HERE"`
+
+or
+
+2. Temporarily replace the token in 'run-bot.ps1' and run:
+
+`.\run-bot.ps1`
