@@ -312,4 +312,7 @@ async def drafthelp(ctx):
 
 
 # Run the bot with the token
-bot.run("MTQ0NjE0MjQ1NTc2OTYwMDAzMA.GL1EL-.3M79H9co7kmzBp4kKFMcpuU5loIXVTio-LP8fU")
+token = os.getenv("DISCORD_TOKEN")
+if not token:
+    raise SystemExit("Set DISCORD_TOKEN in your environment.")
+bot.run(token)
