@@ -2,13 +2,13 @@
 
 -Download contents of repository into a folder
 
--Open powershell command line in same folder as above and run:
+-Open PowerShell command line in same folder as above and run:
 
 `py -3 -m pip install -r 'requirements.txt'`
 
 -Start the bot:
 
-1. Run the following in powershell command line (after inserting the bot's Discord token):
+1. Run the following in PowerShell command line (after inserting the bot's Discord token):
 
 `.\run-bot.ps1 -Token "DISCORD_TOKEN_HERE"`
 
