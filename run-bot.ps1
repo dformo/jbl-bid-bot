@@ -13,7 +13,7 @@ Security:
 #>
 
 param(
-    [string]$Token = "YOUR_TOKEN_HERE"
+    [string]$Token = "DISCORD_TOKEN_HERE"
 )
 
 function Prompt-ForToken {
@@ -24,7 +24,7 @@ function Prompt-ForToken {
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 }
 
-if ([string]::IsNullOrWhiteSpace($Token) -or $Token -eq 'YOUR_TOKEN_HERE') {
+if ([string]::IsNullOrWhiteSpace($Token) -or $Token -eq 'DISCORD_TOKEN_HERE') {
     Write-Host "No token provided on the command line or placeholder detected. Prompting for token..."
     $Token = Prompt-ForToken
 }
