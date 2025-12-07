@@ -10,7 +10,7 @@
 
 1. Run the following in powershell command line (after inserting the bot's Discord token):
 
-`.\run-bot.ps1 -Token "YOUR_TOKEN_HERE"`
+`.\run-bot.ps1 -Token "DISCORD_TOKEN_HERE"`
 
 or
 
