@@ -8,7 +8,7 @@
 
 -Start the bot:
 
-1. Run the following in powershell command line (after inserting your token):
+1. Run the following in powershell command line (after inserting the bot's Discord token):
 
 `.\run-bot.ps1 -Token "YOUR_TOKEN_HERE"`
 
