@@ -17,3 +17,5 @@ or
 2. Temporarily replace the token in 'run-bot.ps1' and run:
 
 `.\run-bot.ps1`
+
+Note: Data is stored in a json file locally in the windows user's AppData\Roaming\JuntaBot folder
