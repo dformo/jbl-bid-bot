@@ -37,14 +37,40 @@ async def on_ready():
 
 # *** COMMANDS AND BOT STARTUP BELOW ***
 
-# COMMAND !startdraft: Start bidding round (!startdraft TT,OO,MN,...)
+# COMMAND !startdraft: Start bidding round (!startdraft TT 100, OO 150 ,MN 175, ...)
 @bot.command()
 async def startdraft(ctx, *, teams):
     teamList = teams.split(",")
     if len(teamList) < 2:
         await ctx.send("❌ At least two teams are required to start a draft.")
         return
-    structuredTeamList = [{"IntroTm": tm.strip(), "ClaimTm": "", "Player": "", "Amt": 0} for tm in teamList]
+    for tm in teamList:
+        parts = tm.strip().split(" ")
+        if len(parts) != 2:
+            await ctx.send(f"❌ Invalid team format: '{tm.strip()}'. Use 'TeamCode Money' format.")
+            return
+    
+    structuredTeamList = []
+    for tm in teamList:
+        token = tm.strip()
+        if not token:
+            continue
+        parts = token.split()
+        intro = parts[0]
+        money_str = parts[1] if len(parts) > 1 else "0"
+        if money_str.lower().endswith("k"):
+            money_str = money_str[:-1]
+        try:
+            money_val = int(money_str)
+        except Exception:
+            money_val = 0
+        structuredTeamList.append({
+            "IntroTm": intro,
+            "MoneyLeft": money_val,
+            "ClaimTm": "",
+            "Player": "",
+            "Amt": 0,
+        })   
     saved_data["draft"] = structuredTeamList
     saved_data["round"] = []
     save_data()
@@ -105,20 +131,22 @@ async def draftrecap(ctx):
     if draft:
         # compute column widths
         team_w = max(len("Intro"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
-        claim_w = max(len("Claim"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
+        money_w = max(len("Money"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
         player_w = max(len("Player"), max((len(entry.get("Player", "")) for entry in draft), default=0))
+        claim_w = max(len("Claim"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
         amt_w = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in draft), default=0))
 
         header = (
-            f"{ 'Intro'.ljust(team_w) }  { 'Claim'.ljust(claim_w) }  { 'Player'.ljust(player_w) }  { 'Amt'.rjust(amt_w) }"
+            f"{ 'Intro'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Claim'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
         )
         sep = "-" * len(header)
         draft_lines.append(header)
         draft_lines.append(sep)
         for entry in draft:
             amt_str = "-" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
+            money_str = f"{entry['MoneyLeft']}k"
             draft_lines.append(
-                f"{ entry.get('IntroTm','').ljust(team_w) }  { entry.get('ClaimTm','').ljust(claim_w) }  { entry.get('Player','').ljust(player_w) }  { amt_str.rjust(amt_w) }"
+                f"{ entry.get('IntroTm','').ljust(team_w)  }  { money_str.rjust(money_w) }  { entry.get('Player','').ljust(player_w) }  { entry.get('ClaimTm','').ljust(claim_w) }  { amt_str.rjust(amt_w) }"
             )
     else:
         draft_lines.append("(no draft entries)")
@@ -202,6 +230,9 @@ async def introduce(ctx, *, tmPlayerAndAmt):
     # Update draft status
     for entry in saved_data["draft"]:
         if entry["IntroTm"] == team:
+            if entry["MoneyLeft"] < amount:
+                await ctx.send(f"❌ Team '{team}' does not have enough money to introduce at {amount}k.")
+                return
             entry["Player"] = player
             break
     
@@ -258,6 +289,10 @@ async def bid(ctx, *, tmPlayerAndAmt):
             if amount <= saved_data["round"][-1]["Amt"]:
                 await ctx.send(f"❌ Bid amount must be higher than the current bid of {saved_data['round'][-1]['Amt']}k.")
                 return
+            for entry in saved_data["draft"]:
+                if entry["IntroTm"] == team and entry["MoneyLeft"] < amount:
+                    await ctx.send(f"❌ Team '{team}' does not have enough money to bid at {amount}k.")
+                    return
 
     # Update round bidding
     roundList = saved_data["round"]
@@ -282,6 +317,10 @@ async def bid(ctx, *, tmPlayerAndAmt):
                 entry["Amt"] = winnerAmt
                 playerName = entry["Player"]
                 break
+        for entry in saved_data["draft"]:
+            if entry["IntroTm"] == winner:
+                entry["MoneyLeft"] -= winnerAmt
+                break
         roundList = []
 
     saved_data["round"] = roundList
@@ -300,7 +339,8 @@ async def drafthelp(ctx):
     help_text = (
         "❓ **JBL Draft Bot — Commands & Examples**\n\n"
         "**Start a free agent bidding round**\n"
-        "`!startdraft TT,OO,MN`\n— Initialize the bidding round with comma-separated team codes in draft pick order.\n\n"
+        "`!startdraft TT 100, OO 112, MN 98`\n— Initialize the bidding round with comma-separated team codes and cash in draft pick order.\n"
+        "*Sample*: `!startdraft AA 170, BA 40, BC 370, CG 207, GG 254, KC 165, OO 380, PF 99, DC 140, MN 514, SR 159, TT 314, WW 175, PY 100, RI 144, SH 35`\n\n"
         "**Introduce a player**\n"
         "`!introduce TT Player Name 1k`\n— Team `TT` introduces 'Player Name' starting at 1k.\n\n"
         "**Place a bid**\n"
