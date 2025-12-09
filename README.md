@@ -8,14 +8,8 @@
 
 -Start the bot:
 
-1. Run the following in PowerShell command line (after inserting the bot's Discord token):
+Run the following in PowerShell command line (and enter the Discord token when prompted):
 
-`.\run-bot.ps1 -Token "DISCORD_TOKEN_HERE"`
-
-or
-
-2. Temporarily replace the token in 'run-bot.ps1' and run:
-
-`.\run-bot.ps1`
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\run-bot.ps1`
 
 Note: Data is stored in a json file locally in the windows user's AppData\Roaming\JuntaBot folder

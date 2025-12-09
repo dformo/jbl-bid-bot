@@ -130,14 +130,14 @@ async def draftrecap(ctx):
     draft_lines = []
     if draft:
         # compute column widths
-        team_w = max(len("Intro"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
-        money_w = max(len("Money"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
+        team_w = max(len("Tm"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
+        money_w = max(len("Cash"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
         player_w = max(len("Player"), max((len(entry.get("Player", "")) for entry in draft), default=0))
-        claim_w = max(len("Claim"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
+        claim_w = max(len("Wn"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
         amt_w = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in draft), default=0))
 
         header = (
-            f"{ 'Intro'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Claim'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
+            f"{ 'Tm'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Wn'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
         )
         sep = "-" * len(header)
         draft_lines.append(header)
@@ -155,10 +155,10 @@ async def draftrecap(ctx):
     round_lines = []
     if roundlist:
         order_w = max(len("#"), len(str(len(roundlist))))
-        team_w_r = max(len("Team"), max((len(entry.get("Tm", "")) for entry in roundlist), default=0))
+        team_w_r = max(len("Tm"), max((len(entry.get("Tm", "")) for entry in roundlist), default=0))
         amt_w_r = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in roundlist), default=0))
         header_r = (
-            f"{ '#'.ljust(order_w) }  { 'Team'.ljust(team_w_r) }  { 'Last Bid'.rjust(amt_w_r) }"
+            f"{ '#'.ljust(order_w) }  { 'Tm'.ljust(team_w_r) }  { 'Bid'.rjust(amt_w_r) }"
         )
         sep_r = "-" * len(header_r)
         round_lines.append(header_r)
@@ -174,7 +174,7 @@ async def draftrecap(ctx):
     content.extend(draft_lines)    
     if roundlist:
         content.append("")
-        content.append("ROUND:")
+        content.append("BIDDING:")
         content.extend(round_lines)
 
     msg = "```text\n" + "\n".join(content) + "\n```"
