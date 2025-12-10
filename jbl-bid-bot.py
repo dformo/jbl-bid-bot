@@ -152,10 +152,11 @@ async def check_for_reminder_task():
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
-    try:
-        check_for_reminder_task.start()
-    except Exception:
-        print("Reminder task failed to startup.")
+    if draft_is_active():
+        try:
+            check_for_reminder_task.start()
+        except Exception:
+            print("Reminder task failed to startup.")
 
 # *** COMMANDS BELOW ***
 # COMMAND !startdraft: Start bidding round (!startdraft TT 100, OO 150 ,MN 175, ...)
@@ -198,7 +199,10 @@ async def startdraft(ctx, *, teams):
     save_data()
     await send_draft_recap(ctx.channel)
     try:
-        check_for_reminder_task.restart()
+        if check_for_reminder_task.is_running():
+            check_for_reminder_task.restart()
+        else:
+            check_for_reminder_task.start()
     except Exception:
         print("Reminder task failed to start.")
 
@@ -291,7 +295,10 @@ async def introduce(ctx, *, tmPlayerAndAmt):
     saved_data["last_channel_id"] = ctx.channel.id
     save_data()
     try:
-        check_for_reminder_task.restart()
+        if check_for_reminder_task.is_running():
+            check_for_reminder_task.restart()
+        else:
+            check_for_reminder_task.start()
     except Exception:
         print("Reminder task failed to start.")
 
@@ -370,14 +377,25 @@ async def bid(ctx, *, tmPlayerAndAmt):
         await send_draft_recap(ctx.channel)
         if draft_is_active():
             try:
-                check_for_reminder_task.restart()
+                if check_for_reminder_task.is_running():
+                    check_for_reminder_task.restart()
+                else:
+                    check_for_reminder_task.start()
             except Exception:
                 print("Reminder task failed to start.")
         else:
+            try:
+                if check_for_reminder_task.is_running():
+                    check_for_reminder_task.stop()
+            except Exception:
+                print("Reminder task failed to stop.")
             await draftstatus(ctx)
     else:
         try:
-            check_for_reminder_task.restart()
+            if check_for_reminder_task.is_running():
+                check_for_reminder_task.restart()
+            else:
+                check_for_reminder_task.start()
         except Exception:
             print("Reminder task failed to start.")
 
