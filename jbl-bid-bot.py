@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import json
 import os
 from pathlib import Path
@@ -30,58 +30,14 @@ def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(saved_data, f)
 
-# Log bot login
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+# Method for checking if draft is active
+def draft_is_active():
+    return len(saved_data["draft"]) > 0 and any(entry["ClaimTm"] == "" for entry in saved_data["draft"])
 
-# *** COMMANDS AND BOT STARTUP BELOW ***
-
-# COMMAND !startdraft: Start bidding round (!startdraft TT 100, OO 150 ,MN 175, ...)
-@bot.command()
-async def startdraft(ctx, *, teams):
-    teamList = teams.split(",")
-    if len(teamList) < 2:
-        await ctx.send("❌ At least two teams are required to start a draft.")
-        return
-    for tm in teamList:
-        parts = tm.strip().split(" ")
-        if len(parts) != 2:
-            await ctx.send(f"❌ Invalid team format: '{tm.strip()}'. Use 'TeamCode Money' format.")
-            return
-    
-    structuredTeamList = []
-    for tm in teamList:
-        token = tm.strip()
-        if not token:
-            continue
-        parts = token.split()
-        intro = parts[0]
-        money_str = parts[1] if len(parts) > 1 else "0"
-        if money_str.lower().endswith("k"):
-            money_str = money_str[:-1]
-        try:
-            money_val = int(money_str)
-        except Exception:
-            money_val = 0
-        structuredTeamList.append({
-            "IntroTm": intro,
-            "MoneyLeft": money_val,
-            "ClaimTm": "",
-            "Player": "",
-            "Amt": 0,
-        })   
-    saved_data["draft"] = structuredTeamList
-    saved_data["round"] = []
-    save_data()
-    await draftrecap(ctx)
-
-
-# COMMAND !draftstatus: Show current round status
-@bot.command()
-async def draftstatus(ctx):
+# Send draft status to a channel (!draftstatus commmand helper)
+async def send_draft_status(channel):
     if len(saved_data["draft"]) == 0:
-        await ctx.send("❌ No draft in progress. Use !startdraft to begin.")
+        await channel.send("❌ No draft in progress. Use !startdraft to begin.")
         return
     if len(saved_data["round"]) == 0:
         nextTmToIntro = ""
@@ -90,9 +46,9 @@ async def draftstatus(ctx):
                 nextTmToIntro = entry["IntroTm"]
                 break
         if nextTmToIntro == "":
-            await ctx.send("🧢 Free agent bidding round complete ⚾")
+            await channel.send("🧢 Free agent bidding round complete ⚾")
         else:
-            await ctx.send(f"📝 Next to introduce a player: **{nextTmToIntro}**")
+            await channel.send(f"📝 Next to introduce a player: **{nextTmToIntro}**")
         return
     
     playerName = ""
@@ -112,18 +68,16 @@ async def draftstatus(ctx):
     if next_to_bid != "":
         msg = msg + f"\nNext up: **{next_to_bid}**"
     
-    await ctx.send(msg)
+    await channel.send(msg)
 
-
-# COMMAND !draftrecap: Show draft recap
-@bot.command()
-async def draftrecap(ctx):
+# Send draft recap to a channel (!draftrecap commmand helper)
+async def send_draft_recap(channel):
     # Build a formatted grid for `draft` and `round` and send as a code block
     draft = saved_data.get("draft", [])
     roundlist = saved_data.get("round", [])
 
     if not draft and not roundlist:
-        await ctx.send("❌ No draft available. Use !stardraft to begin.")
+        await channel.send("❌ No draft available. Use !startdraft to begin.")
         return
 
     # --- Draft table ---
@@ -178,8 +132,88 @@ async def draftrecap(ctx):
         content.extend(round_lines)
 
     msg = "```text\n" + "\n".join(content) + "\n```"
-    await ctx.send(msg)
-    await draftstatus(ctx)
+    await channel.send(msg)
+
+# Send draft status message periodically if no activity
+@tasks.loop(seconds=300.0)
+async def check_for_reminder_task():
+    if not draft_is_active():
+        return
+    last_chan_id = saved_data.get("last_channel_id")
+    if last_chan_id:
+        channel = bot.get_channel(last_chan_id)
+        if channel:
+            try:
+                await send_draft_status(channel)
+            except Exception:
+                print("Error sending draft status reminder.")
+
+# Log bot login
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    try:
+        check_for_reminder_task.start()
+    except Exception:
+        print("Reminder task failed to startup.")
+
+# *** COMMANDS BELOW ***
+# COMMAND !startdraft: Start bidding round (!startdraft TT 100, OO 150 ,MN 175, ...)
+@bot.command()
+async def startdraft(ctx, *, teams):
+    teamList = teams.split(",")
+    if len(teamList) < 2:
+        await ctx.send("❌ At least two teams are required to start a draft.")
+        return
+    for tm in teamList:
+        parts = tm.strip().split(" ")
+        if len(parts) != 2:
+            await ctx.send(f"❌ Invalid team format: '{tm.strip()}'. Use 'TeamCode Money' format.")
+            return
+    
+    structuredTeamList = []
+    for tm in teamList:
+        token = tm.strip()
+        if not token:
+            continue
+        parts = token.split()
+        intro = parts[0]
+        money_str = parts[1] if len(parts) > 1 else "0"
+        if money_str.lower().endswith("k"):
+            money_str = money_str[:-1]
+        try:
+            money_val = int(money_str)
+        except Exception:
+            money_val = 0
+        structuredTeamList.append({
+            "IntroTm": intro,
+            "MoneyLeft": money_val,
+            "ClaimTm": "",
+            "Player": "",
+            "Amt": 0,
+        })   
+    saved_data["draft"] = structuredTeamList
+    saved_data["round"] = []
+    saved_data["last_channel_id"] = ctx.channel.id
+    save_data()
+    await send_draft_recap(ctx.channel)
+    try:
+        check_for_reminder_task.restart()
+    except Exception:
+        print("Reminder task failed to start.")
+
+
+# COMMAND !draftstatus: Show current round status
+@bot.command()
+async def draftstatus(ctx):
+    await send_draft_status(ctx.channel)
+
+
+# COMMAND !draftrecap: Show draft recap
+@bot.command()
+async def draftrecap(ctx):
+    await send_draft_recap(ctx.channel)
+    await send_draft_status(ctx.channel)
 
 
 # COMMAND !introduce: Introduce a player for bidding (!introduce TT PlayerName 1k)
@@ -254,8 +288,12 @@ async def introduce(ctx, *, tmPlayerAndAmt):
     structuredRoundList.append(first)
 
     saved_data["round"] = structuredRoundList
+    saved_data["last_channel_id"] = ctx.channel.id
     save_data()
-    await draftstatus(ctx)
+    try:
+        check_for_reminder_task.restart()
+    except Exception:
+        print("Reminder task failed to start.")
 
 
 # COMMAND !bid: Bid for a player (!bid TT PlayerName 1k)
@@ -324,13 +362,24 @@ async def bid(ctx, *, tmPlayerAndAmt):
         roundList = []
 
     saved_data["round"] = roundList
+    saved_data["last_channel_id"] = ctx.channel.id
     save_data()
 
     if bidRoundOver:
         await ctx.send(f"💵 **{winner}** wins **{playerName}** for **${winnerAmt}k**!")
-        await draftrecap(ctx)
+        await send_draft_recap(ctx.channel)
+        if draft_is_active():
+            try:
+                check_for_reminder_task.restart()
+            except Exception:
+                print("Reminder task failed to start.")
+        else:
+            await draftstatus(ctx)
     else:
-        await draftstatus(ctx)
+        try:
+            check_for_reminder_task.restart()
+        except Exception:
+            print("Reminder task failed to start.")
 
 
 # COMMAND !drafthelp: Show bot commands with examples
