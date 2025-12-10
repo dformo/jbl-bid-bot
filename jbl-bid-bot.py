@@ -342,14 +342,14 @@ async def drafthelp(ctx):
         "`!startdraft TT 100, OO 112, MN 98`\n— Initialize the bidding round with comma-separated team codes and cash in draft pick order.\n"
         "*Sample*: `!startdraft AA 170, BA 40, BC 370, CG 207, GG 254, KC 165, OO 380, PF 99, DC 140, MN 514, SR 159, TT 314, WW 175, PY 100, RI 144, SH 35`\n\n"
         "**Introduce a player**\n"
-        "`!introduce TT Player Name 1k`\n— Team `TT` introduces 'Player Name' starting at 1k.\n\n"
+        "`!introduce TT Player Name 1k`\n— Team *TT* introduces *Player Name* starting at *1k*.\n\n"
         "**Place a bid**\n"
-        "`!bid TT 2k`\n— Team `TT` bids 2k on the current player.\n"
-        "`!bid TT pass`\n— Team `TT` passes.\n\n"
+        "`!bid TT 2k`\n— Team *TT* bids *2k* on the current player.\n"
+        "`!bid TT pass`\n— Team *TT* passes.\n\n"
         "**Status & recap**\n"
         "`!draftstatus`\n— Show current bidding status (who's on the clock, current bid).\n"
         "`!draftrecap`\n— Show entire bidding round progress.\n\n"
-        "**Amount format**: use numbers with optional trailing `k` (e.g., `1k`, `20k` - 1 = 1,000)."
+        "**Amount format**: use numbers with optional trailing *k* (e.g. *1k*, *20k*, *100k*)."
     )
     await ctx.send(help_text)
 
