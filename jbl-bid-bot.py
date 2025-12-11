@@ -23,18 +23,18 @@ if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         saved_data = json.load(f)
 else:
-    saved_data = {"draft": [], "round": []}  # default structure
+    saved_data = {"draft": [], "round": []}
 
 # Method for saving data to file
 def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(saved_data, f)
 
-# Method for checking if draft is active
+# Method for checking if draft is currently active
 def draft_is_active():
     return len(saved_data["draft"]) > 0 and any(entry["ClaimTm"] == "" for entry in saved_data["draft"])
 
-# Send draft status to a channel (!draftstatus commmand helper)
+# Send draft status to a channel (!draftstatus helper method)
 async def send_draft_status(channel):
     if len(saved_data["draft"]) == 0:
         await channel.send("❌ No draft in progress. Use !startdraft to begin.")
@@ -70,7 +70,7 @@ async def send_draft_status(channel):
     
     await channel.send(msg)
 
-# Send draft recap to a channel (!draftrecap commmand helper)
+# Send draft recap to a channel (!draftrecap helper method)
 async def send_draft_recap(channel):
     # Build a formatted grid for `draft` and `round` and send as a code block
     draft = saved_data.get("draft", [])
@@ -83,7 +83,6 @@ async def send_draft_recap(channel):
     # --- Draft table ---
     draft_lines = []
     if draft:
-        # compute column widths
         team_w = max(len("Tm"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
         money_w = max(len("Cash"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
         player_w = max(len("Player"), max((len(entry.get("Player", "")) for entry in draft), default=0))
@@ -140,15 +139,17 @@ async def check_for_reminder_task():
     if not draft_is_active():
         return
     last_chan_id = saved_data.get("last_channel_id")
-    if last_chan_id:
-        channel = bot.get_channel(last_chan_id)
-        if channel:
-            try:
-                await send_draft_status(channel)
-            except Exception:
-                print("Error sending draft status reminder.")
+    if not last_chan_id:
+        return
+    channel = bot.get_channel(last_chan_id)
+    if not channel:
+        return
+    try:
+        await send_draft_status(channel)
+    except Exception:
+        print("Error sending draft status reminder.")
 
-# Log bot login
+# Bot login
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
@@ -158,7 +159,8 @@ async def on_ready():
         except Exception:
             print("Reminder task failed to startup.")
 
-# *** COMMANDS BELOW ***
+
+# --- COMMANDS BELOW --- #
 # COMMAND !startdraft: Start bidding round (!startdraft TT 100, OO 150 ,MN 175, ...)
 @bot.command()
 async def startdraft(ctx, *, teams):
@@ -330,7 +332,11 @@ async def bid(ctx, *, tmPlayerAndAmt):
             await ctx.send("❌ Invalid amount format. Use a number followed by 'k' (e.g., 1k).")
             return
         else:
-            amount = int(amount)
+            try:
+                amount = int(amount)
+            except Exception:
+                await ctx.send("❌ Invalid amount format. Use a number followed by 'k' (e.g., 1k).")
+                return
             if amount <= saved_data["round"][-1]["Amt"]:
                 await ctx.send(f"❌ Bid amount must be higher than the current bid of {saved_data['round'][-1]['Amt']}k.")
                 return
