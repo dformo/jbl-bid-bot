@@ -2,6 +2,9 @@ import discord
 from discord.ext import commands, tasks
 import json
 import os
+import signal
+import atexit
+import asyncio
 from pathlib import Path
 
 # Create bot folder if not present
@@ -427,8 +430,55 @@ async def drafthelp(ctx):
     await ctx.send(help_text)
 
 
+# --- Bot shutdown methods --- #
+async def _shutdown():
+    try:
+        if check_for_reminder_task.is_running():
+            check_for_reminder_task.stop()
+    except Exception:
+        pass
+    try:
+        save_data()
+    except Exception:
+        pass
+    try:
+        await bot.close()
+    except Exception:
+        pass
+
+def _request_shutdown(signum=None, frame=None):
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(_shutdown())
+    except Exception:
+        pass
+
+def _cleanup():
+    try:
+        if check_for_reminder_task.is_running():
+            check_for_reminder_task.stop()
+    except Exception:
+        pass
+    try:
+        save_data()
+    except Exception:
+        pass
+
+# Register signal handlers for graceful shutdown (use signal.signal for cross-platform)
+try:
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
+except Exception:
+    pass
+
+# Register atexit fallback for cleanup
+atexit.register(_cleanup)
+
 # Run the bot with the token
 token = os.getenv("DISCORD_TOKEN")
 if not token:
     raise SystemExit("Set DISCORD_TOKEN in your environment.")
-bot.run(token)
+try:
+    bot.run(token)
+finally:
+    _cleanup()
