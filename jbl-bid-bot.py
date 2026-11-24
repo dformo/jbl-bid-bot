@@ -54,6 +54,36 @@ def on_clock_team():
 def round_is_live():
     return len(saved_data["draft"]) > 0 and len(saved_data["round"]) > 0
 
+def team_entry(team):
+    for entry in saved_data["draft"]:
+        if entry["IntroTm"] == team:
+            return entry
+    return None
+
+def team_controller(team):
+    """User id allowed to act for a team, or '' if open to everyone."""
+    entry = team_entry(team)
+    return entry.get("Ctrl", "") if entry else ""
+
+def actor_allowed(interaction, team):
+    """True if this user may act for the team (controller match, or team is open)."""
+    ctrl = team_controller(team)
+    return ctrl == "" or str(interaction.user.id) == ctrl
+
+def denied_message(team):
+    ctrl = team_controller(team)
+    if ctrl:
+        return f"❌ **{team}** is controlled by <@{ctrl}> — you can't act for them."
+    return "❌ Unknown team."
+
+def parse_controller(raw):
+    """Accept a Discord mention (<@id> / <@!id>), a bare user id, or -1 / blank for open."""
+    s = (raw or "").strip()
+    if s in ("", "-1"):
+        return ""
+    digits = "".join(ch for ch in s if ch.isdigit())
+    return digits if digits else None
+
 def set_turn_clock():
     saved_data["turn_started_at"] = datetime.now().isoformat(timespec="seconds")
     saved_data["last_reminder_min"] = 0
@@ -104,17 +134,15 @@ def declare_winner():
     save_data()
     return f"WIN:{winner}:{playerName}:{winnerAmt}"
 
-def do_nominate(team, player, amount_k):
-    """Apply a nomination. Returns an error string, or '' on success."""
+def do_nominate(player, amount_k):
+    """Apply a nomination for the next team in rotation. Returns an error string, or '' on success."""
     if len(saved_data["draft"]) == 0:
         return "No draft in progress. Use `!startdraft` to begin."
     if len(saved_data["round"]) > 0:
         return "A player is already up for bid — nominate is only possible after a player is won."
-    nextTm = next_team_to_introduce()
-    if nextTm is None:
+    team = next_team_to_introduce()
+    if team is None:
         return "The draft is already complete."
-    if team != nextTm:
-        return f"It's not {team}'s turn to nominate. Next up: {nextTm}"
     if player.strip() == "":
         return "Player name cannot be empty."
     if amount_k is None:
@@ -319,8 +347,10 @@ async def reminder_loop():
     if channel is None:
         return
 
+    ctrl = team_controller(code)
+    ping = f" <@{ctrl}>" if ctrl else ""
     try:
-        await channel.send(f"⏰ **{code}** has been on the clock for {minutes} minute{'s' if minutes > 1 else ''} (⏱ {fmt_elapsed()})")
+        await channel.send(f"⏰ **{code}**{ping} has been on the clock for {minutes} minute{'s' if minutes > 1 else ''} (⏱ {fmt_elapsed()})")
     except Exception:
         pass
     await refresh_board()
@@ -331,12 +361,15 @@ async def _wait_before_reminding():
 
 # --- Modals --- #
 class NominateModal(discord.ui.Modal, title="Nominate a player"):
-    team = discord.ui.TextInput(label="Team code (must be the next in rotation)", placeholder="e.g. TT", max_length=10, required=True)
     player = discord.ui.TextInput(label="Player name", placeholder="e.g. Shohei Ohtani", max_length=60, required=True)
     amount = discord.ui.TextInput(label="Opening bid in k", placeholder="e.g. 1", max_length=10, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        err = do_nominate(str(self.team.value).strip().upper(), self.player.value, parse_amount(self.amount.value))
+        team = next_team_to_introduce()
+        if team and not actor_allowed(interaction, team):
+            await interaction.response.send_message(denied_message(team), ephemeral=True)
+            return
+        err = do_nominate(self.player.value, parse_amount(self.amount.value))
         if err:
             await interaction.response.send_message(f"❌ {err}", ephemeral=True)
             return
@@ -348,6 +381,11 @@ class BidModal(discord.ui.Modal, title="Place a bid"):
     amount = discord.ui.TextInput(label="Bid amount in k", placeholder="e.g. 2", max_length=10, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if round_is_live():
+            team = saved_data["round"][0]["Tm"]
+            if not actor_allowed(interaction, team):
+                await interaction.response.send_message(denied_message(team), ephemeral=True)
+                return
         result = do_bid(parse_amount(self.amount.value))
         if result.startswith("WIN:"):
             _, winner, playerName, winnerAmt = result.split(":")
@@ -371,12 +409,20 @@ class BoardView(discord.ui.View):
         if not round_is_live():
             await interaction.response.send_message("❌ Nominate a player first.", ephemeral=True)
             return
+        team = saved_data["round"][0]["Tm"]
+        if not actor_allowed(interaction, team):
+            await interaction.response.send_message(denied_message(team), ephemeral=True)
+            return
         await interaction.response.send_modal(BidModal())
 
     @discord.ui.button(label="⏭ Pass", style=discord.ButtonStyle.secondary, custom_id="jbl:pass")
     async def pass_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not round_is_live():
             await interaction.response.send_message("❌ Nominate a player first.", ephemeral=True)
+            return
+        team = saved_data["round"][0]["Tm"]
+        if not actor_allowed(interaction, team):
+            await interaction.response.send_message(denied_message(team), ephemeral=True)
             return
         result = do_pass()
         if result.startswith("WIN:"):
@@ -395,6 +441,10 @@ class BoardView(discord.ui.View):
     async def nominate_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if round_is_live():
             await interaction.response.send_message("❌ A player is still up for bid — nominate happens after a win.", ephemeral=True)
+            return
+        team = next_team_to_introduce()
+        if team and not actor_allowed(interaction, team):
+            await interaction.response.send_message(denied_message(team), ephemeral=True)
             return
         await interaction.response.send_modal(NominateModal())
 
@@ -425,21 +475,21 @@ async def on_ready():
 # --- COMMANDS --- #
 @bot.command()
 async def startdraft(ctx, *, teams):
-    """!startdraft TT 100, OO 150, MN 175 — teams with cash, in pick order."""
+    """!startdraft OO 630 @jimihaze, BC 570 -1, SH 363 @shorry — team, cash, controller (@user or -1 for open)."""
     teamList = teams.split(",")
     if len(teamList) < 2:
         await ctx.send("❌ At least two teams are required to start a draft.")
         return
     for tm in teamList:
         parts = tm.strip().split(" ")
-        if len(parts) != 2:
-            await ctx.send(f"❌ Invalid team format: '{tm.strip()}'. Use 'TeamCode Money' format.")
+        if len(parts) not in (2, 3):
+            await ctx.send(f"❌ Invalid team format: '{tm.strip()}'. Use 'TeamCode Money [@user|-1]' format.")
             return
 
     structuredTeamList = []
     for tm in teamList:
         parts = tm.strip().split()
-        intro = parts[0]
+        intro = parts[0].upper()
         money_str = parts[1].lower()
         if money_str.endswith("k"):
             money_str = money_str[:-1]
@@ -447,9 +497,19 @@ async def startdraft(ctx, *, teams):
             money_val = int(money_str)
         except Exception:
             money_val = 0
+        ctrl_raw = parts[2] if len(parts) == 3 else ""
+        ctrl = parse_controller(ctrl_raw)
+        if ctrl is None:
+            await ctx.send(f"❌ Invalid controller for team '{intro}': use a Discord @mention, a user id, or -1 for open control.")
+            return
+        duplicate = any(e["IntroTm"] == intro for e in structuredTeamList)
+        if duplicate:
+            await ctx.send(f"❌ Duplicate team code: '{intro}'.")
+            return
         structuredTeamList.append({
             "IntroTm": intro,
             "MoneyLeft": money_val,
+            "Ctrl": ctrl,
             "ClaimTm": "",
             "Player": "",
             "Amt": 0,
@@ -485,10 +545,10 @@ async def cash(ctx):
 async def drafthelp(ctx):
     help_text = (
         "❓ **JBL Draft Bot — How it works**\n\n"
-        "`!startdraft TT 100, OO 150, MN 175` — teams + cash, in pick order.\n"
+        "`!startdraft TT 100 @jimihaze7, OO 150 -1, MN 175 -1` — teams + cash + userid, in pick order.\n"
         "`!cash` — every team's remaining cash, players won, and winning amounts in draft order.\n"
         "`!board` — post the draft board (pins it). Everyone can use the buttons:\n"
-        "　📋 **Nominate** — team code, player name, opening bid (only between picks, next team in rotation).\n"
+        "　📋 **Nominate** — player name, opening bid (only between picks; nomination goes to the next team in rotation).\n"
         "　🔨 **Bid** — amount only; must beat the current bid. Applies to the team on the clock.\n"
         "　⏭ **Pass** — one click, passes the team on the clock.\n"
         "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer.\n\n"
