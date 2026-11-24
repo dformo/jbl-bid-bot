@@ -217,6 +217,34 @@ def do_pass():
     save_data()
     return f"PASS:{passing_team}"
 
+# --- Recap grid (three side-by-side columns) --- #
+def add_recap_grid_fields(embed):
+    """Three inline=True fields that render side by side as a recap table."""
+    col_tm_cash, col_player, col_result = [], [], []
+    live = round_is_live()
+    for entry in saved_data["draft"]:
+        tm = entry["IntroTm"]
+        col_tm_cash.append(f"**{tm}**: ${entry['MoneyLeft']}k")
+
+        player = entry["Player"]
+        if not player:
+            col_player.append("")
+            col_result.append("")
+        elif entry["ClaimTm"]:
+            amt_str = f"${entry['Amt']}k" if entry["Amt"] else "FREE"
+            col_player.append(f"~~{player}~~")
+            col_result.append(f"**{entry['ClaimTm']}**: {amt_str}")
+        else:
+            col_player.append(f"**{player}**")
+            col_result.append("bidding…" if live else "")
+
+    def clip(lines):
+        return ("\n".join(lines) or "—")[:1024]
+
+    embed.add_field(name="Team/Cash", value=clip(col_tm_cash), inline=True)
+    embed.add_field(name="Player", value=clip(col_player), inline=True)
+    embed.add_field(name="Winner", value=clip(col_result), inline=True)
+
 # --- Board embed builder --- #
 def build_board_embed():
     embed = discord.Embed(title="⚾ JBL Free Agent Bidding Board", color=0x6D4AFF)
@@ -236,9 +264,7 @@ def build_board_embed():
             if elapsed:
                 line += f" (⏱ {elapsed})"
             embed.description = line
-        result = saved_data.get("last_result", "")
-        if result:
-            embed.add_field(name="Last result", value=result, inline=False)
+        add_recap_grid_fields(embed)
         return embed
 
     playerName = ""
@@ -258,9 +284,7 @@ def build_board_embed():
     embed.add_field(name="💰 High bid", value=f"**{amount}k** — {teamName}", inline=True)
     embed.add_field(name="⏭ Still in (order)", value=next_to_bid, inline=False)
 
-    result = saved_data.get("last_result", "")
-    if result:
-        embed.add_field(name="Last result", value=result, inline=False)
+    add_recap_grid_fields(embed)
 
     return embed
 
@@ -315,6 +339,18 @@ async def refresh_board():
         return True
     except Exception:
         return False
+
+async def post_board(channel):
+    """Post a fresh board message in the given channel and track it as the live board."""
+    msg = await channel.send(embed=build_board_embed(), view=build_board_view())
+    saved_data["board_channel_id"] = channel.id
+    saved_data["board_message_id"] = msg.id
+    save_data()
+    try:
+        await msg.pin(reason="JBL draft board")
+    except Exception:
+        pass
+    return msg
 
 # --- On-the-clock reminder loop --- #
 @tasks.loop(seconds=10)
@@ -521,21 +557,13 @@ async def startdraft(ctx, *, teams):
     saved_data["last_channel_id"] = ctx.channel.id
     clear_turn_clock()
     save_data()
-    await refresh_board()
-    await send_draft_recap(ctx.channel)
-    await ctx.send(f"✅ Draft started with {len(structuredTeamList)} teams. First to nominate: **{structuredTeamList[0]['IntroTm']}**.")
+    await refresh_board()          # update the existing board, if one is pinned
+    await post_board(ctx.channel)  # post a fresh board where the draft was started
 
 @bot.command()
 async def board(ctx):
     """Create (or recreate) the visual draft board in the current channel."""
-    msg = await ctx.send(embed=build_board_embed(), view=build_board_view())
-    saved_data["board_channel_id"] = ctx.channel.id
-    saved_data["board_message_id"] = msg.id
-    save_data()
-    try:
-        await msg.pin(reason="JBL draft board")
-    except Exception:
-        pass
+    await post_board(ctx.channel)
 
 @bot.command()
 async def cash(ctx):
