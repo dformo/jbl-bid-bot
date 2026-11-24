@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import json
 import os
 import signal
@@ -56,10 +56,12 @@ def round_is_live():
 
 def set_turn_clock():
     saved_data["turn_started_at"] = datetime.now().isoformat(timespec="seconds")
+    saved_data["last_reminder_min"] = 0
     save_data()
 
 def clear_turn_clock():
     saved_data["turn_started_at"] = ""
+    saved_data["last_reminder_min"] = 0
     save_data()
 
 def fmt_elapsed():
@@ -234,7 +236,7 @@ def build_board_embed():
 
     return embed
 
-# --- Full recap table (original style: cash, players won, winning amounts) --- #
+# --- Recap (cash, players won, winning amounts) --- #
 async def send_draft_recap(channel):
     draft = saved_data.get("draft", [])
 
@@ -285,6 +287,47 @@ async def refresh_board():
         return True
     except Exception:
         return False
+
+# --- On-the-clock reminder loop --- #
+@tasks.loop(seconds=10)
+async def reminder_loop():
+    """While a team is on the clock, remind the channel once per minute and refresh the board."""
+    code = on_clock_team()
+    ts = saved_data.get("turn_started_at", "")
+    if code is None or not ts:
+        saved_data["last_reminder_min"] = 0
+        return
+
+    try:
+        elapsed_secs = int((datetime.now() - datetime.fromisoformat(ts)).total_seconds())
+    except Exception:
+        return
+    if elapsed_secs < 60:
+        return
+
+    minutes = elapsed_secs // 60
+    if minutes <= saved_data.get("last_reminder_min", 0):
+        return  # already reminded for this minute
+
+    saved_data["last_reminder_min"] = minutes
+    save_data()
+
+    cid = saved_data.get("board_channel_id") or saved_data.get("last_channel_id")
+    if not cid:
+        return
+    channel = bot.get_channel(cid)
+    if channel is None:
+        return
+
+    try:
+        await channel.send(f"⏰ **{code}** has been on the clock for {minutes} minute{'s' if minutes > 1 else ''} (⏱ {fmt_elapsed()})")
+    except Exception:
+        pass
+    await refresh_board()
+
+@reminder_loop.before_loop
+async def _wait_before_reminding():
+    await bot.wait_until_ready()
 
 # --- Modals --- #
 class NominateModal(discord.ui.Modal, title="Nominate a player"):
@@ -376,6 +419,8 @@ def build_board_view():
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     bot.add_view(BoardView())  # re-route persistent button interactions after restart
+    if not reminder_loop.is_running():
+        reminder_loop.start()
 
 # --- COMMANDS --- #
 @bot.command()
@@ -446,12 +491,17 @@ async def drafthelp(ctx):
         "　📋 **Nominate** — team code, player name, opening bid (only between picks, next team in rotation).\n"
         "　🔨 **Bid** — amount only; must beat the current bid. Applies to the team on the clock.\n"
         "　⏭ **Pass** — one click, passes the team on the clock.\n"
-        "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer."
+        "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer.\n\n"
+        "⏰ While a team is on the clock, the channel gets a reminder every minute and the board auto-refreshes."
     )
     await ctx.send(help_text)
 
 # --- Bot shutdown methods --- #
 async def _shutdown():
+    try:
+        reminder_loop.cancel()
+    except Exception:
+        pass
     try:
         save_data()
     except Exception:
