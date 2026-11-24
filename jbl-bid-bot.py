@@ -195,17 +195,6 @@ def build_board_embed():
         embed.description = "No draft in progress. Use `!startdraft TT 100, OO 150, ...` to begin."
         return embed
 
-    picks = []
-    for entry in saved_data["draft"]:
-        if entry["ClaimTm"]:
-            amt_str = f"${entry['Amt']}k" if entry["Amt"] else "FREE"
-            picks.append(f"**{entry['Player']}** — {entry['ClaimTm']} ({amt_str})")
-        elif entry["Player"] == "":
-            break
-
-    if picks:
-        embed.add_field(name="✅ Completed picks", value="\n".join(picks)[:1024] or "—", inline=False)
-
     code = on_clock_team()
     elapsed = fmt_elapsed()
 
@@ -232,11 +221,11 @@ def build_board_embed():
     teamName = saved_data["round"][-1]["Tm"]
     next_to_bid = ", ".join(entry["Tm"] for entry in saved_data["round"][1:]) or "—"
 
-    clock_line = code + (f" (⏱ {elapsed})" if elapsed else "")
+    clock_line = f"**{code}**" + (f" (⏱ {elapsed})" if elapsed else "")
 
+    embed.add_field(name="⏰ On the clock", value=clock_line, inline=True)
     embed.add_field(name="🔨 Up for bid", value=f"**{playerName}**", inline=True)
     embed.add_field(name="💰 High bid", value=f"**{amount}k** — {teamName}", inline=True)
-    embed.add_field(name="⏰ On the clock", value=clock_line, inline=True)
     embed.add_field(name="⏭ Still in (order)", value=next_to_bid, inline=False)
 
     result = saved_data.get("last_result", "")
