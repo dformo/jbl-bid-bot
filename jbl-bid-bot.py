@@ -5,7 +5,6 @@ import os
 import signal
 import atexit
 import asyncio
-import copy
 from datetime import datetime
 from pathlib import Path
 
@@ -72,23 +71,6 @@ def fmt_elapsed():
     m, s = divmod(secs, 60)
     return f"{m}m {s:02d}s"
 
-# --- Undo support (keeps the last 10 steps) --- #
-def push_undo():
-    stack = saved_data.setdefault("undo_stack", [])
-    snapshot = copy.deepcopy({k: v for k, v in saved_data.items() if k != "undo_stack"})
-    stack.append(snapshot)
-    del stack[:-10]
-
-def pop_undo():
-    stack = saved_data.get("undo_stack", [])
-    if not stack:
-        return False
-    restored = stack.pop()
-    saved_data.clear()
-    saved_data.update(restored)
-    save_data()
-    return True
-
 # --- Actions --- #
 def parse_amount(raw):
     s = raw.strip()
@@ -136,11 +118,9 @@ def do_nominate(team, player, amount_k):
     if amount_k is None:
         return "Invalid amount. Use a number (e.g., 1 for 1k)."
 
-    push_undo()
     for entry in saved_data["draft"]:
         if entry["IntroTm"] == team:
             if entry["MoneyLeft"] < amount_k:
-                pop_undo()
                 return f"Team '{team}' does not have enough money to nominate at {amount_k}k."
             entry["Player"] = player.strip()
             break
@@ -178,7 +158,6 @@ def do_bid(amount_k):
         if entry["IntroTm"] == team and entry["MoneyLeft"] < amount_k:
             return f"Team '{team}' does not have enough money to bid at {amount_k}k."
 
-    push_undo()
     roundList = saved_data["round"]
     first = roundList.pop(0)
     first["Amt"] = amount_k
@@ -197,7 +176,6 @@ def do_pass():
     if not round_is_live():
         return "Nominate a player first — no one is up for bid yet."
 
-    push_undo()
     passing_team = saved_data["round"][0]["Tm"]
     saved_data["round"].pop(0)
 
@@ -265,7 +243,7 @@ def build_board_embed():
     if result:
         embed.add_field(name="Last result", value=result, inline=False)
 
-    embed.set_footer(text="Anyone may act • ↩️ Undo reverses mistakes • Clock = time since last action")
+    embed.set_footer(text="Anyone may act • 🔄 Refresh updates the clock • Clock = time since last action")
     return embed
 
 # --- Full recap table (original style: cash, players won, winning amounts) --- #
@@ -406,11 +384,8 @@ class BoardView(discord.ui.View):
             return
         await interaction.response.send_modal(NominateModal())
 
-    @discord.ui.button(label="↩️ Undo", style=discord.ButtonStyle.danger, custom_id="jbl:undo")
-    async def undo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not pop_undo():
-            await interaction.response.send_message("Nothing to undo.", ephemeral=True)
-            return
+    @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.secondary, custom_id="jbl:refresh")
+    async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if not await refresh_board():
             await interaction.followup.send("⚠️ Board message not found — run `!board` to recreate it.", ephemeral=True)
@@ -464,7 +439,6 @@ async def startdraft(ctx, *, teams):
             "Amt": 0,
         })
 
-    push_undo()
     saved_data["draft"] = structuredTeamList
     saved_data["round"] = []
     saved_data["last_result"] = ""
@@ -505,7 +479,7 @@ async def drafthelp(ctx):
         "　📋 **Nominate** — team code, player name, opening bid (only between picks, next team in rotation).\n"
         "　🔨 **Bid** — amount only; must beat the current bid. Applies to the team on the clock.\n"
         "　⏭ **Pass** — one click, passes the team on the clock.\n"
-        "　↩️ **Undo** — revert the last action (up to 10 steps).\n\n"
+        "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer.\n\n"
         "When only one team remains, they win at the current bid and the next team can nominate.\n"
         "`!draftrecap` — full table: every team's remaining cash, players won, and winning amounts.\n"
         "`!draftstatus` — current state as an embed."
