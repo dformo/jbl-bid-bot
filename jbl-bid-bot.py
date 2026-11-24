@@ -232,15 +232,13 @@ def build_board_embed():
     if result:
         embed.add_field(name="Last result", value=result, inline=False)
 
-    embed.set_footer(text="Anyone may act • 🔄 Refresh updates the clock • Clock = time since last action")
     return embed
 
 # --- Full recap table (original style: cash, players won, winning amounts) --- #
 async def send_draft_recap(channel):
     draft = saved_data.get("draft", [])
-    roundlist = saved_data.get("round", [])
 
-    if not draft and not roundlist:
+    if not draft:
         await channel.send("❌ No draft available. Use !startdraft to begin.")
         return
 
@@ -263,26 +261,10 @@ async def send_draft_recap(channel):
     else:
         draft_lines.append("(no draft entries)")
 
-    round_lines = []
-    if roundlist:
-        order_w = max(len("#"), len(str(len(roundlist))))
-        team_w_r = max(len("Tm"), max((len(entry.get("Tm", "")) for entry in roundlist), default=0))
-        amt_w_r = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in roundlist), default=0))
-        header_r = f"{ '#'.ljust(order_w) }  { 'Tm'.ljust(team_w_r) }  { 'Bid'.rjust(amt_w_r) }"
-        round_lines.append(header_r)
-        round_lines.append("-" * len(header_r))
-        for idx, entry in enumerate(roundlist, start=1):
-            amt_str = "-" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
-            round_lines.append(f"{ str(idx).ljust(order_w) }  { entry.get('Tm','').ljust(team_w_r) }  { amt_str.rjust(amt_w_r) }")
-
     content = ["DRAFT:"]
     content.extend(draft_lines)
-    if roundlist:
-        content.append("")
-        content.append("BIDDING:")
-        content.extend(round_lines)
 
-    msg = "```text\n" + "\n".join(content) + "\n```"
+    msg = "```text\n" + "\n".join(draft_lines) + "\n```"
     await channel.send(msg)
 
 # --- Board refresh --- #
@@ -451,12 +433,7 @@ async def board(ctx):
         pass
 
 @bot.command()
-async def draftstatus(ctx):
-    await ctx.send(embed=build_board_embed())
-
-@bot.command()
-async def draftrecap(ctx):
-    """Full recap: every team's remaining cash, players won, winning amounts, and live bidding order."""
+async def cash(ctx):
     await send_draft_recap(ctx.channel)
 
 @bot.command()
@@ -464,14 +441,12 @@ async def drafthelp(ctx):
     help_text = (
         "❓ **JBL Draft Bot — How it works**\n\n"
         "`!startdraft TT 100, OO 150, MN 175` — teams + cash, in pick order.\n"
+        "`!cash` — every team's remaining cash, players won, and winning amounts in draft order.\n"
         "`!board` — post the draft board (pins it). Everyone can use the buttons:\n"
         "　📋 **Nominate** — team code, player name, opening bid (only between picks, next team in rotation).\n"
         "　🔨 **Bid** — amount only; must beat the current bid. Applies to the team on the clock.\n"
         "　⏭ **Pass** — one click, passes the team on the clock.\n"
-        "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer.\n\n"
-        "When only one team remains, they win at the current bid and the next team can nominate.\n"
-        "`!draftrecap` — full table: every team's remaining cash, players won, and winning amounts.\n"
-        "`!draftstatus` — current state as an embed."
+        "　🔄 **Refresh** — redraw the board, updating the on-the-clock timer."
     )
     await ctx.send(help_text)
 
