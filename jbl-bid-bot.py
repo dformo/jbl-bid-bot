@@ -129,7 +129,6 @@ def declare_winner():
             entry["MoneyLeft"] -= winnerAmt
             break
     saved_data["round"] = []
-    saved_data["last_result"] = f"💵 **{winner}** won **{playerName}** for **${winnerAmt}k**"
     clear_turn_clock()
     save_data()
     return f"WIN:{winner}:{playerName}:{winnerAmt}"
@@ -171,7 +170,6 @@ def do_nominate(player, amount_k):
     structuredRoundList.append(first)
 
     saved_data["round"] = structuredRoundList
-    saved_data["last_result"] = ""
     set_turn_clock()
     return ""
 
@@ -217,33 +215,38 @@ def do_pass():
     save_data()
     return f"PASS:{passing_team}"
 
-# --- Recap grid (three side-by-side columns) --- #
-def add_recap_grid_fields(embed):
-    """Three inline=True fields that render side by side as a recap table."""
-    col_tm_cash, col_player, col_result = [], [], []
-    live = round_is_live()
-    for entry in saved_data["draft"]:
-        tm = entry["IntroTm"]
-        col_tm_cash.append(f"**{tm}**: ${entry['MoneyLeft']}k")
+# --- Shared recap table builder (used by the board footer and !cash) --- #
+def build_recap_lines():
+    """The DRAFT table exactly as !cash renders it: Tm / Cash / Player / Wn / Amt."""
+    draft = saved_data.get("draft", [])
+    if not draft:
+        return ["(no draft entries)"]
 
-        player = entry["Player"]
-        if not player:
-            col_player.append("")
-            col_result.append("")
-        elif entry["ClaimTm"]:
-            amt_str = f"${entry['Amt']}k" if entry["Amt"] else "FREE"
-            col_player.append(f"~~{player}~~")
-            col_result.append(f"**{entry['ClaimTm']}**: {amt_str}")
-        else:
-            col_player.append(f"**{player}**")
-            col_result.append("bidding…" if live else "")
+    team_w = max(len("Tm"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
+    money_w = max(len("Cash"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
+    player_w = max(len("Player"), max((len(entry.get("Player", "")) for entry in draft), default=0))
+    claim_w = max(len("Wn"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
+    amt_w = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in draft), default=0))
+    header = f"{ 'Tm'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Wn'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
+    lines = [header, "-" * len(header)]
+    for entry in draft:
+        amt_str = "-" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
+        money_str = f"{entry['MoneyLeft']}k"
+        lines.append(
+            f"{ entry.get('IntroTm','').ljust(team_w)  }  { money_str.rjust(money_w) }  { entry.get('Player','').ljust(player_w) }  { entry.get('ClaimTm','').ljust(claim_w) }  { amt_str.rjust(amt_w) }"
+        )
+    return lines
 
-    def clip(lines):
-        return ("\n".join(lines) or "—")[:1024]
+def build_recap_table():
+    """Board-footer version of the !cash DRAFT table (identical data and format)."""
+    return "\n".join(build_recap_lines())
 
-    embed.add_field(name="Team/Cash", value=clip(col_tm_cash), inline=True)
-    embed.add_field(name="Player", value=clip(col_player), inline=True)
-    embed.add_field(name="Winner", value=clip(col_result), inline=True)
+def add_recap_footer_field(embed):
+    """Add the recap table as the last full-width field — renders at the bottom (footer) of the board."""
+    table = build_recap_table()
+    if len(table) > 1010:  # keep room for the ``` fences inside the 1024-char field limit
+        table = table[:1007] + "..."
+    embed.add_field(name="\u200b", value=f"```text\n{table}\n```", inline=False)
 
 # --- Board embed builder --- #
 def build_board_embed():
@@ -264,7 +267,7 @@ def build_board_embed():
             if elapsed:
                 line += f" (⏱ {elapsed})"
             embed.description = line
-        add_recap_grid_fields(embed)
+        add_recap_footer_field(embed)
         return embed
 
     playerName = ""
@@ -284,41 +287,16 @@ def build_board_embed():
     embed.add_field(name="💰 High bid", value=f"**{amount}k** — {teamName}", inline=True)
     embed.add_field(name="⏭ Still in (order)", value=next_to_bid, inline=False)
 
-    add_recap_grid_fields(embed)
+    add_recap_footer_field(embed)
 
     return embed
 
 # --- Recap (cash, players won, winning amounts) --- #
 async def send_draft_recap(channel):
-    draft = saved_data.get("draft", [])
-
-    if not draft:
+    if not saved_data.get("draft", []):
         await channel.send("❌ No draft available. Use !startdraft to begin.")
         return
-
-    draft_lines = []
-    if draft:
-        team_w = max(len("Tm"), max((len(entry.get("IntroTm", "")) for entry in draft), default=0))
-        money_w = max(len("Cash"), max((1 if entry.get("MoneyLeft", 0) == 0 else len(f"{entry['MoneyLeft']}k") for entry in draft), default=0))
-        player_w = max(len("Player"), max((len(entry.get("Player", "")) for entry in draft), default=0))
-        claim_w = max(len("Wn"), max((len(entry.get("ClaimTm", "")) for entry in draft), default=0))
-        amt_w = max(len("Amt"), max((1 if entry.get("Amt", 0) == 0 else len(f"{entry['Amt']}k") for entry in draft), default=0))
-        header = f"{ 'Tm'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Wn'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
-        draft_lines.append(header)
-        draft_lines.append("-" * len(header))
-        for entry in draft:
-            amt_str = "-" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
-            money_str = f"{entry['MoneyLeft']}k"
-            draft_lines.append(
-                f"{ entry.get('IntroTm','').ljust(team_w)  }  { money_str.rjust(money_w) }  { entry.get('Player','').ljust(player_w) }  { entry.get('ClaimTm','').ljust(claim_w) }  { amt_str.rjust(amt_w) }"
-            )
-    else:
-        draft_lines.append("(no draft entries)")
-
-    content = ["DRAFT:"]
-    content.extend(draft_lines)
-
-    msg = "```text\n" + "\n".join(draft_lines) + "\n```"
+    msg = "```text\n" + "\n".join(build_recap_lines()) + "\n```"
     await channel.send(msg)
 
 # --- Board refresh --- #
@@ -553,7 +531,6 @@ async def startdraft(ctx, *, teams):
 
     saved_data["draft"] = structuredTeamList
     saved_data["round"] = []
-    saved_data["last_result"] = ""
     saved_data["last_channel_id"] = ctx.channel.id
     clear_turn_clock()
     save_data()
