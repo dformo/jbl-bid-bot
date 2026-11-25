@@ -250,13 +250,18 @@ def add_recap_footer_field(embed):
 
 # --- Board embed builder --- #
 def build_board_embed():
-    embed = discord.Embed(title="⚾ JBL Free Agent Bidding Board", color=0x6D4AFF)
+    code = on_clock_team()
+
+    # Headline carries the on-the-clock team: biggest, boldest text on the card.
+    if code is not None and len(saved_data["draft"]) > 0 and len(saved_data["round"]) > 0:
+        embed = discord.Embed(title=f"⚾ JBL Board — {code} ON THE CLOCK", color=0x6D4AFF)
+    else:
+        embed = discord.Embed(title="⚾ JBL Free Agent Bidding Board", color=0x6D4AFF)
 
     if len(saved_data["draft"]) == 0:
         embed.description = "No draft in progress. Use `!startdraft TT 100, OO 150, ...` to begin."
         return embed
 
-    code = on_clock_team()
     elapsed = fmt_elapsed()
 
     if not round_is_live():
