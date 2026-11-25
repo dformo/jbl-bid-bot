@@ -230,7 +230,7 @@ def build_recap_lines():
     header = f"{ 'Tm'.ljust(team_w) }  { 'Cash'.rjust(money_w) }  { 'Player'.ljust(player_w) }  { 'Wn'.ljust(claim_w) }  { 'Amt'.rjust(amt_w) }"
     lines = [header, "-" * len(header)]
     for entry in draft:
-        amt_str = "-" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
+        amt_str = "" if entry.get("Amt", 0) == 0 else f"{entry['Amt']}k"
         money_str = f"{entry['MoneyLeft']}k"
         lines.append(
             f"{ entry.get('IntroTm','').ljust(team_w)  }  { money_str.rjust(money_w) }  { entry.get('Player','').ljust(player_w) }  { entry.get('ClaimTm','').ljust(claim_w) }  { amt_str.rjust(amt_w) }"
